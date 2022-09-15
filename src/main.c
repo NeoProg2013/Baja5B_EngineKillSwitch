@@ -20,23 +20,26 @@ void fail_safe_loop() {
     }
 }
 
+static uint16_t width = 0;
 int main() {
     system_init();
     systimer_init();
     
     gpio_set_mode(GPIOA, 9, GPIO_MODE_INPUT);
-    gpio_set_pull(GPIOA, 9, GPIO_PULL_DOWN);
+    gpio_set_pull(GPIOA, 9, GPIO_PULL_UP);
     
     gpio_set(GPIOA, 10);
     gpio_set_mode(GPIOA, 10, GPIO_MODE_OUTPUT);
     gpio_set_output_type(GPIOA, 10, GPIO_TYPE_OPEN_DRAIN);
     
+    RCC->APB1RSTR |= RCC_APB1RSTR_TIM14RST;
+    RCC->APB1RSTR &= ~RCC_APB1RSTR_TIM14RST;
+    TIM14->CR1 = TIM_CR1_UDIS;
     TIM14->PSC = APB1_CLOCK_FREQUENCY / 100000;
     TIM14->CNT = 0;
     
     
     delay_ms(1000);
-    
     
     uint64_t start_timeout = get_time_ms();
     while (true) {
@@ -47,11 +50,10 @@ int main() {
                 fail_safe_loop();
             }
         }
-        TIM14->CR1 &= ~TIM_CR1_CEN;
-        
-        
+
         TIM14->CNT = 0;
         TIM14->CR1 = TIM_CR1_CEN;
+        TIM14->EGR = TIM_EGR_UG;
         start_timeout = get_time_ms();
         while (gpio_read_input(GPIOA, 9) == 1) {
             if (get_time_ms() - start_timeout > 200) {
@@ -60,8 +62,8 @@ int main() {
         }
         TIM14->CR1 &= ~TIM_CR1_CEN;
         
-        uint16_t width = TIM14->CNT;
-        if (width > 1700) {
+        width = TIM14->CNT;
+        if (width > 1500) {
             gpio_reset(GPIOA, 10);
         } else {
             gpio_set(GPIOA, 10);
